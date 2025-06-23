@@ -10,34 +10,43 @@ import java.util.concurrent.*;
 
 public class CrptApi {
     private final RateLimiter rateLimiter;
+    private final HttpClient httpClient;
+    private final ObjectMapper objectMapper;
+    private final static URI documentCreateURI;
+
+    static {
+        try {
+            documentCreateURI = new URI("https://ismp.crpt.ru/api/v3/lk/documents/create");
+        } catch (URISyntaxException e) {
+            throw new RuntimeException(e);
+        }
+    }
 
     public CrptApi(TimeUnit timeUnit, int requestLimit) {
         rateLimiter = new RateLimiter(timeUnit, requestLimit);
+        httpClient = HttpClient.newBuilder().build();
+        objectMapper = new ObjectMapper();
     }
 
     public String createDocument(Object document, String signature) {
         rateLimiter.acquire();
-        ObjectMapper mapper = new ObjectMapper();
-        DocumentInfo documentInfo = null;
         try {
-            documentInfo = new DocumentInfo(
+            DocumentInfo documentInfo = new DocumentInfo(
                     DocumentFormat.MANUAL,
-                    mapper.writeValueAsString(document),
+                    objectMapper.writeValueAsString(document),
                     signature,
                     "LP_INTRODUCE_GOODS"
             );
-            HttpResponse<String> response;
-            try (HttpClient client = HttpClient.newHttpClient()) {
-                response = client.send(HttpRequest.newBuilder()
-                        .uri(new URI("https://ismp.crpt.ru/api/v3/lk/documents/create"))
-                        .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(documentInfo)))
-                        .build(), HttpResponse.BodyHandlers.ofString());
-            }
+            HttpResponse<String> response = httpClient.send(HttpRequest.newBuilder()
+                    .uri(documentCreateURI)
+                    .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(documentInfo)))
+                    .build(), HttpResponse.BodyHandlers.ofString());
+
             if (response.statusCode() == 200) {
                 return response.body();
             }
             throw new RuntimeException("Error creating document");
-        } catch (URISyntaxException | IOException | InterruptedException e) {
+        } catch (IOException | InterruptedException e) {
             throw new RuntimeException(e);
         }
     }
@@ -47,7 +56,8 @@ public class CrptApi {
             String product_document,
             String signature,
             String type
-    ) {}
+    ) {
+    }
 
     enum DocumentFormat {
         MANUAL,
@@ -56,10 +66,11 @@ public class CrptApi {
     }
 
     private class RateLimiter {
-        private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+        private final ScheduledExecutorService scheduler;
         private final Semaphore semaphore;
 
         public RateLimiter(TimeUnit timeUnit, int requestLimit) {
+            scheduler = Executors.newSingleThreadScheduledExecutor();
             semaphore = new Semaphore(requestLimit, true);
             scheduler.scheduleAtFixedRate(() -> {
                 int permitsToAdd = requestLimit - semaphore.availablePermits();
