@@ -1,4 +1,7 @@
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.PropertyNamingStrategy;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
 
 import java.io.IOException;
 import java.net.URI;
@@ -52,8 +55,10 @@ public class CrptApi {
     }
 
     private record DocumentInfo(
-            DocumentFormat document_format,
-            String product_document,
+            @JsonProperty("document_format")
+            DocumentFormat documentFormat,
+            @JsonProperty("product_document")
+            String productDocument,
             String signature,
             String type
     ) {
